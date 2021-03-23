@@ -19,7 +19,12 @@ public:
   const size_t Length() const {
     return size;
   }
-
+  void setData(const char* p) {
+      ptr = p;
+  }
+  void setSize(size_t s) {
+      size = s;
+  }
 private:
   const char* ptr;
   size_t size;
