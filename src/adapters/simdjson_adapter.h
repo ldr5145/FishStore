@@ -11,141 +11,198 @@
 #ifdef _MSC_VER
 #define NOMINMAX
 #endif
-#include <simdjson/parsedjson.h>
-#include <simdjson/jsonparser.h>
+
+#include <simdjson.h>
+
 #include "adapters/common_utils.h"
+//using namespace simdjson;
 
-using namespace simdjson;
-
+const size_t DEFAULT_BATCH_SIZE = 1000000;
 namespace fishstore {
 namespace adapter {
 
 class SIMDJsonField {
 public:
-  SIMDJsonField(int64_t id_, const ParsedJson::Iterator& it_)
-    : field_id(id_), iter(it_) {}
+    SIMDJsonField(int64_t id, const simdjson::dom::element el) 
+    : field_id(id), element(el){}
 
-  inline int64_t FieldId() const {
-    return field_id;
-  }
+	inline int64_t FieldId() const {
+		return field_id;
+	}
 
-  inline NullableBool GetAsBool() const {
-    switch (iter.get_type()) {
-    case 't':
-      return NullableBool(true);
-    case 'f':
-      return NullableBool(false);
-    default:
-      return NullableBool();
+	inline NullableBool GetAsBool() const {
+        if (element.is_bool()) {
+            return NullableBool(bool(element));
+        }
+        else {
+            return NullableBool();
+        }
     }
-  }
 
-  inline NullableInt GetAsInt() const {
-    if (iter.is_integer()) {
-      return NullableInt(static_cast<int32_t>(iter.get_integer()));
-    } else return NullableInt();
-  }
+    inline NullableInt GetAsInt() const{
+        if (element.is_int64()) {
+            return NullableInt(int64_t(element));
+        }
+        else {
+            return NullableInt();
+        }
+    }
 
-  inline NullableLong GetAsLong() const {
-    if (iter.is_integer()) {
-      return NullableLong(iter.get_integer());
-    } else return NullableLong();
-  }
+    inline NullableLong GetAsLong() const{
+        if (element.is_int64()) {
+            return NullableLong(int64_t(element));
+        }
+        else {
+            return NullableLong();
+        }
+    }
 
-  inline NullableFloat GetAsFloat() const {
-    if (iter.is_double()) {
-      return NullableFloat(static_cast<float>(iter.get_double()));
-    } else return NullableFloat();
-  }
+    inline NullableFloat GetAsFloat() const{
+        if (element.is_double()) {
+            return NullableFloat(static_cast<float>(double(element)));
+        }
+        else {
+            return NullableFloat();
+        }
+    }
 
-  inline NullableDouble GetAsDouble() const {
-    if (iter.is_double()) {
-      return NullableDouble(iter.get_double());
-    } else return NullableDouble();
-  }
+    inline NullableDouble GetAsDouble() const{
+		if (element.is_double()) {
+			return NullableDouble(double(element));
+		}
+		else {
+			return NullableDouble();
+		}
+    }
 
-  inline NullableString GetAsString() const {
-    if (iter.is_string()) {
-      return NullableString(std::string(iter.get_string(), iter.get_string_length()));
-    } else return NullableString();
-  }
+    inline NullableString GetAsString() const{
+        if (element.is_string()) {
+            auto val = element.get_string().value();
+            return NullableString(std::string(val.data(), val.size()));
+        }
+        else {
+            return NullableString();
+        }
+    }
 
-  inline NullableStringRef GetAsStringRef() const {
-    if (iter.is_string()) {
-      return NullableStringRef(StringRef(iter.get_string(), iter.get_string_length()));
-    } else return NullableStringRef();
-  }
-
+    inline NullableStringRef GetAsStringRef() const{
+        if (element.is_string()) {
+            auto val = element.get_string().value();
+            //auto a = NullableStringRef(StringRef(static_cast<const char*>(element), len));
+            //std::cout << "Has value: " << a.HasValue() << "\tvalue().data(): " << a.Value().Data() << std::endl;
+            //std::cout << "element in GetAsStringRef: " << string << std::endl;
+            //return NullableStringRef(StringRef(static_cast<const char*>(element), len));
+            return NullableStringRef({ val.data(), val.size() });
+        }
+        else {
+            return NullableStringRef();
+        }
+    }
 private:
-  int64_t field_id;
-  ParsedJson::Iterator iter;
+    int64_t field_id;
+    const simdjson::dom::element element;
 };
 
 class SIMDJsonRecord {
 public:
   friend class SIMDJsonParser;
 
-  SIMDJsonRecord() : original(), fields() {}
-
+  SIMDJsonRecord()
+      : fields(), original() {}
   SIMDJsonRecord(const char* data, size_t length)
-    : original(data, length) {
-    fields.clear();
+      : original(data, length) {
+      fields.clear();
   }
-
+  inline void clear() {
+      original.setData(NULL);
+      original.setSize(0);
+      fields.clear();
+  }
   inline const std::vector<SIMDJsonField>& GetFields() const {
-    return fields;
+      return fields;
   }
 
-  inline StringRef GetRawText() const {
-    return original;
+ inline StringRef GetRawText() const {
+     return original;
   }
 
-public:
-  StringRef original;
-  std::vector<SIMDJsonField> fields;
+private:
+    std::vector<SIMDJsonField> fields;
+    StringRef original;
 };
 
 class SIMDJsonParser {
 public:
-  SIMDJsonParser(const std::vector<std::string>& field_names, const size_t alloc_bytes = 1LL << 25)
-  : fields(field_names) {
-    auto success = pj.allocate_capacity(alloc_bytes);
-    assert(success);
-    has_next = false;
-  }
+    SIMDJsonParser(const std::vector<std::string>& field_names, const size_t alloc_bytes = 1LL << 25)
+        : fields(field_names), stream(), buffer_(NULL), p(), len_(0), record() {}
 
-  inline void Load(const char* buffer, size_t length) {
-    record.original = StringRef(buffer, length);
-    record.fields.clear();
-    auto ok = json_parse(buffer, length, pj);
-    if (ok != 0 || !pj.is_valid()) {
-      printf("Parsing failed...\n");
-      has_next = false;
-    } else {
-      has_next = true;
+    inline void Load(const char* buffer, size_t length) {
+        buffer_ = buffer;
+        len_ = length;
+        p.parse_many(buffer, length, DEFAULT_BATCH_SIZE).get(stream);
+        it = stream.begin();
     }
-  }
 
-  inline bool HasNext() {
-    return has_next;
-  }
-
-  inline const SIMDJsonRecord& NextRecord() {
-    ParsedJson::Iterator it(pj);
-    for (auto field_id = 0; field_id < fields.size(); ++field_id) {
-      if (it.move_to(fields[field_id])) {
-        record.fields.emplace_back(SIMDJsonField{field_id, it});
-      }
+    inline bool HasNext() {
+        return (it!=stream.end());
     }
-    has_next = false;
-    return record;
-  }
 
+    inline const SIMDJsonRecord& NextRecord() {
+        //for (dom::document_stream::iterator i = stream.begin(); i != stream.end(); ++i) {
+        //    simdjson_result<dom::element> doc = *i;
+        //    //doc.get(doc_val);
+        //    for (auto field_id = 0; field_id < fields.size(); ++field_id) {
+        //        //std::cout << "field_id: " <<  fields[field_id] << std::endl;
+        //        //std::cout << "fields before conditional check: " << fields[field_id] << "\ntype before: " << typeid(fields[field_id]).name() << std::endl;
+        //        //const std::string_view s{ fields[field_id] };
+        //        //dom::element doc_val;
+        //        //std::cout <<"------------------------------\n" << doc << std::endl;
+        //        dom::element doc_val;
+        //        auto error = doc.at_pointer(fields[field_id]).get(doc_val);
+        //        if (!error) {
+        //            //std::cout << "doc val: " << doc_val << std::endl;
+        //            SIMDJsonField f = SIMDJsonField{ field_id,doc_val };
+        //            record.fields.emplace_back(SIMDJsonField{ field_id, doc_val });
+        //            auto test = f.GetAsStringRef();
+        //            std::cout << "\nfield: " << fields[field_id] << "\ndoc_val: " << doc_val << "\nStringRef value data: " << test.Value().Data() << "\n\n\n";
+        //            //if (strcmp("PullRequestEvent", test.Value().Data())) {
+        //            //    std::cout << "\nfield: " << fields[field_id] << "\ndoc_val: " << doc_val << "\nStringRef value data: " << test.Value().Data() << "\n\n\n";
+        //            //    count++;
+        //            //}
+        //        }
+        //        else {
+        //            //doc_val = dom::element{};
+        //            //std::cout << "\n Condition failed.\n";
+        //        }
+        //    }
+        //    std::cout << "--------------------------------\n";
+        //}
+        //has_next = false;
+        ////std::cout << count << std::endl;
+        //return record;
+        //record.clear();
+		record.clear();
+		record.original.setData(buffer_ + it.current_index());
+		auto last_index = it.current_index();
+		for (auto& field : fields) {
+            simdjson::dom::element val;
+            auto error = (*it).at_pointer(field).get(val);
+            if (!error) {
+                record.fields.emplace_back(SIMDJsonField(record.fields.size(), (*it).at_pointer(field).value()));
+            }
+		}
+		record.original.setSize(it != stream.end() ? it.current_index() - last_index : len_ - last_index);
+		++it;
+		return record;
+    }
 private:
-  std::vector<std::string> fields;
-  ParsedJson pj;
-  SIMDJsonRecord record;
-  bool has_next;
+    const char* buffer_;
+    size_t len_;
+    simdjson::dom::parser p;
+    simdjson::dom::document_stream stream;
+    simdjson::dom::document_stream::iterator it;
+    std::vector<std::string> fields;
+    SIMDJsonRecord record;
 };
 
 class SIMDJsonAdapter {
@@ -155,20 +212,20 @@ public:
   typedef SIMDJsonRecord record_t;
 
   inline static parser_t* NewParser(const std::vector<std::string>& fields) {
-    return new parser_t{ fields };
+	  return new parser_t{ fields };
   }
 
   inline static void Load(parser_t* const parser, const char* payload, size_t length, size_t offset = 0) {
-    assert(offset <= length);
-    parser->Load(payload + offset, length - offset);
+	  assert(offset <= length);
+	  parser->Load(payload + offset, length - offset);
   }
 
   inline static bool HasNext(parser_t* const parser) {
-    return parser->HasNext();
+	  return parser->HasNext();
   }
 
   inline static const record_t& NextRecord(parser_t* const parser) {
-    return parser->NextRecord();
+	  return parser->NextRecord();
   }
 };
 
