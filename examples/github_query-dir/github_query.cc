@@ -42,7 +42,7 @@ public:
   }
 
   inline void Touch(const char* payload, uint32_t payload_size) {
-    // printf("Record Hit: %.*s\n", payload_size, payload);
+    //printf("Record Hit: %.*s\n", payload_size, payload);
     ++cnt;
   }
 
@@ -79,7 +79,7 @@ public:
     : psf_id_(psf_id), value_(value), cnt(0) {}
 
   inline void Touch(const char* payload, uint32_t payload_size) {
-    // printf("Record Hit: %.*s\n", payload_size, payload);
+    //printf("Record Hit: %.*s\n", payload_size, payload);
     ++cnt;
   }
 
@@ -213,7 +213,7 @@ int main(int argc, char* argv[]) {
   auto predicate1_id =
     store.MakeInlinePSF({ "/type", "/payload/action" }, lib_id, "opened_issue");
   auto predicate2_id =
-    store.MakeInlinePSF({ "/type", "/payload/pull_request/head.repo/language" }, lib_id, "cpp_pr");
+    store.MakeInlinePSF({ "/type", "/payload/pull_request/head/repo/language" }, lib_id, "cpp_pr");
 
   std::vector<ParserAction> parser_actions;
   parser_actions.push_back({ REGISTER_GENERAL_PSF, id_proj });
