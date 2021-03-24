@@ -186,13 +186,19 @@ public:
 		auto last_index = it.current_index();
 		for (auto& field : fields) {
             simdjson::dom::element val;
+            //std::cout << "field: " << field << std::endl;
             auto error = (*it).at_pointer(field).get(val);
             if (!error) {
+                //std::cout << "hit. Getting information..." << std::endl;
                 record.fields.emplace_back(SIMDJsonField(record.fields.size(), (*it).at_pointer(field).value()));
+                //std::cout << "size (passed into SIMDJsonField as field_id): " << record.fields.size() - 1 << std::endl
+                //    << "dom::element data passed to SIMDJsonField: " << (*it).at_pointer(field).value() << "\n\n";
             }
 		}
+        ++it;
 		record.original.setSize(it != stream.end() ? it.current_index() - last_index : len_ - last_index);
-		++it;
+        //std::cout << "new record.original size (not field): " << record.original.Length() << std::endl;
+        //std::cout << it.current_index() << " " << last_index << " " << len_ << "\n\n";
 		return record;
     }
 private:
