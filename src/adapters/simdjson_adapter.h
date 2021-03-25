@@ -139,7 +139,9 @@ public:
     inline void Load(const char* buffer, size_t length) {
         buffer_ = buffer;
         len_ = length;
-        p.parse_many(buffer, length, DEFAULT_BATCH_SIZE).get(stream);
+        auto str_ = simdjson::padded_string(buffer, length);
+        len_ = str_.length();
+        p.parse_many(str_, DEFAULT_BATCH_SIZE).get(stream);
         it = stream.begin();
     }
 

@@ -58,6 +58,7 @@ add_subdirectory(third_party/simdjson EXCLUDE_FROM_ALL)
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/third_party/hopscotch-map/include)
+include_directories(${CMAKE_SOURCE_DIR}/third_party/simdjson/include)
 
 # Set the directory targets when build in libs and binaries
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
