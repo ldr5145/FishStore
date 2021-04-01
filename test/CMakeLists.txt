@@ -22,6 +22,7 @@ ENDFUNCTION()
 
 ADD_FISHSTORE_TEST(in_memory_test "")
 ADD_FISHSTORE_TEST(ingest_queue_test "ingest_test.h")
+ADD_FISHSTORE_TEST(simdjson_adapter_test "")
 if (NOT MSVC)
 ADD_FISHSTORE_TEST(ingest_uring_test "ingest_test.h")
 endif()

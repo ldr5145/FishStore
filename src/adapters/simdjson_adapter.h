@@ -203,7 +203,7 @@ public:
         //std::cout << it.current_index() << " " << last_index << " " << len_ << "\n\n";
 		return record;
     }
-private:
+public:
     const char* buffer_;
     size_t len_;
     simdjson::dom::parser p;
